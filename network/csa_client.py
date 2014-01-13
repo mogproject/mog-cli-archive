@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-""""Command Line Interface for CSA Shogi Client"""
+""""
+Command Line Interface for CSA Shogi Client
+
+Protocol document: http://www.computer-shogi.org/protocol/tcp_ip_server_113.html
+"""
 
 
 import sys
