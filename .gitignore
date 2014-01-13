@@ -34,3 +34,18 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# OS files
+.DS_Store
+*~
+*.bak
+
+# Eclipse files
+.settings/
+
+# IntelliJ IDEA files
+*.iml
+.idea/
+
+# Logs
+*.log*
