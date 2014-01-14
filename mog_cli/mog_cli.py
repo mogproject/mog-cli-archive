@@ -4,10 +4,10 @@
 
 
 import sys
+import network
 
 
 def main():
-    import network.csa_client
     network.csa_client.main()
 
 

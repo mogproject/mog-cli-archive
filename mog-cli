@@ -1,2 +1,4 @@
 #!/bin/sh
-$0.py $@
+
+# launch main module
+`(cd \`dirname $0\` && pwd)`/mog_cli/mog_cli.py $@
