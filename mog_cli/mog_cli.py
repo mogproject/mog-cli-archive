@@ -4,11 +4,11 @@
 
 
 import sys
-import network
+# import network
 
 
 def main():
-    network.csa_client.main()
+    pass
 
 
 if __name__ == '__main__':

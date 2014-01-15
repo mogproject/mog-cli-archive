@@ -7,6 +7,8 @@ Protocol document: http://www.computer-shogi.org/protocol/tcp_ip_server_113.html
 """
 
 import socket
+import re
+import itertools
 
 from util.logger import logger
 
@@ -28,7 +30,7 @@ DEFAULT_PORT = 4081
 LF = '\n'
 
 # state
-Connected, GameWaiting, GamePlaying = range(3)
+CONNECTED, GAME_WAITING, AGREE_WAITING, MOVE_WAITING, GAME_PLAYING = range(5)
 
 
 class CsaClient:
@@ -42,7 +44,7 @@ class CsaClient:
         # open connection
         self.sock = socket.create_connection((self.host, self.port), self.timeout)
         self.file = self.sock.makefile('rb')
-        self.state = Connected
+        self.state = CONNECTED
 
     def close(self):
         """Close connection."""
@@ -99,30 +101,80 @@ class CsaClient:
 
     def login(self, username, password):
         """
+        Run in Connected state (before GameWaiting).
         @return tuple of boolean (true if succeeded) and received message
         """
-        self.__assertState(Connected)
+        self.__assertState(CONNECTED)
         res = self.__command('LOGIN {} {}'.format(username, password))
 
         if res[0] == 'LOGIN:incorrect':
             return False, res[0]
         if res[0] != 'LOGIN:{} OK'.format(username):
             raise ProtocolError(res)
-        self.state = GameWaiting
+
+        self.user = username
+        self.state = GAME_WAITING
         return True, res[0]
 
     def logout(self):
         """
+        Run in GameWaiting state.
         @return tuple of boolean (always true) and received message
         """
-        self.__assertState(GameWaiting)
+        self.__assertState(GAME_WAITING)
         res = self.__command('LOGOUT')
         if res[0] != 'LOGOUT:completed':
             raise ProtocolError(res)
+        self.state = CONNECTED
         return True, res[0]
 
     def get_game_condition(self):
-        pass
+        """
+        Wait for receiving game condition.
+
+        Run in GameWaiting state.
+        @return tuple of GameCondition object and received message
+        """
+        self.__assertState(GAME_WAITING)
+
+        res = self.__await('END Game_Summary')
+        cond = self.__parse_game_condition(res)
+        self.state = AGREE_WAITING
+        return cond, res
+
+    def __parse_game_condition(self, lines):
+        pat_tag_begin = re.compile(r'BEGIN (\w+)')
+        pat_key_value = re.compile(r'([\w+-]+):(.+)')
+
+        def f(ls):
+            d = {}
+            while ls:
+                head = ls.pop(0)
+
+                if pat_tag_begin.match(head):
+                    tag = pat_tag_begin.match(head).group(1)
+
+                    # Find first closing tag (if not found, throws ValueError).
+                    j = ls.index('END {}'.format(tag))
+
+                    if tag == 'Position':
+                        d[tag] = '\n'.join(ls[:j])
+                    else:
+                        d[tag] = f(ls[:j])
+                    ls = ls[j + 1:]
+                    continue
+
+                if pat_key_value.match(head):
+                    m = pat_key_value.match(head)
+                    d[m.group(1)] = m.group(2)
+                    continue
+
+                raise ProtocolError(head)
+            return d
+
+        return f(lines)
+
+
 # TODO
 # def validate_username(username):
 #     pass
