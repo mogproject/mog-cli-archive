@@ -32,6 +32,11 @@ LF = '\n'
 # state
 CONNECTED, GAME_WAITING, AGREE_WAITING, MOVE_WAITING, GAME_PLAYING = range(5)
 
+# regexp pattern
+PAT_MOVE = re.compile(r'^[/+-]\d{2}[1-9]{2}[A-Z]{2}$')
+PAT_MOVE_CONFIRM = re.compile(r'^[/+-]\d{2}[1-9]{2}[A-Z]{2},T\d+$')
+PAT_CONFIRM = re.compile(r'.*,T(\d+)$')
+
 
 class CsaClient:
 
@@ -214,31 +219,76 @@ class CsaClient:
             return res[0]
         raise ProtocolError(res)
 
+    def __parse_consumed_time(self, line):
+        m = PAT_CONFIRM.match(line)
+        if m:
+            return int(m.group(1))
+        else:
+            return None
 
+    def move(self, move_string):
+        assert self.state == GAME_PLAYING, 'illegal state: {}'.format(self.state)
 
-# TODO
-# def validate_username(username):
-#     pass
-# #数字('0'-'9')、英大文字('A'-'Z')、英小文字('a'-'z')、アンダースコア('_')、ハイフン('-')のいずれかの文字を用 いた32バイト以内
+        assert PAT_MOVE.match(move_string), 'move string format error: {}'.format(move_string)
 
-# result_occasion
-#     #SENNICHITE
-# -- (draw by repetition)
-#
-# #OUTE_SENNICHITE
-# -- (illegal move by repetition)
-#
-# #ILLEGAL_MOVE
-# -- (other illegal moves including illegal use of %KACHI)
-#
-# #TIME_UP
-#
-# #RESIGN
-# -- (one player resigned by '%TORYO')
-#
-# #JISHOGI
-# -- (one player declared a win by '%KACHI' and the declaration is legal)
-#
+        res = self.__command(move_string)
+
+        if res[0].startswith('#'):
+            reason = res[0]
+            result = self.__receive()
+            if (reason, result) not in [
+                ('#SENNICHITE', '#DRAW'), ('#OUTE_SENNICHITE', '#LOSE'), ('#ILLEGAL_MOVE', '#LOSE'),
+                ('#TIME_UP', '#LOSE')]:
+                raise ProtocolError((reason, result))
+
+            self.state = GAME_WAITING
+            return False, reason, result
+
+        if not PAT_MOVE_CONFIRM.match(res[0]):
+            raise ProtocolError(res)
+
+        consumed_time = self.__parse_consumed_time(res[0])
+        assert(consumed_time is not None)
+
+        self.state = MOVE_WAITING
+        return True, consumed_time, None
+
+    def __move_special(self, command, possible_results):
+        assert self.state == GAME_PLAYING, 'illegal state: {}'.format(self.state)
+
+        res = self.__command(command)
+
+        # It depends whether consumed time comes or not.
+        consumed_time = self.__parse_consumed_time(res[0])
+        if res[0].startswith(command) and consumed_time is None:
+            reason = res[0]
+        else:
+            reason = self.__receive()
+
+        # It depends whether command string echoes back or not.
+        if reason == command:
+            reason = self.__receive()
+
+        if not res[0].startswith(command):
+            raise ProtocolError(res)
+
+        result = self.__receive()
+
+        if (reason, result) not in possible_results:
+            raise ProtocolError((reason, result))
+
+        self.state = GAME_WAITING
+        return consumed_time, reason, result
+
+    def resign(self):
+        return self.__move_special('%TORYO', [('#RESIGN', '#LOSE'), ('#TIME_UP', '#LOSE')])
+
+    def declare_win(self):
+        return self.__move_special('%KACHI', [('#ILLEGAL_MOVE', '#LOSE'), ('#TIME_UP', '#LOSE'), ('#JISHOGI', '#WIN')])
+
+    def get_move(self):
+        # TODO
+        pass
 
 
 if __name__ == '__main__':
