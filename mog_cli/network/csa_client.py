@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """"
 Raw communications for CSA Shogi Client
@@ -8,7 +8,6 @@ Protocol document: http://www.computer-shogi.org/protocol/tcp_ip_server_113.html
 
 import socket
 import re
-import itertools
 
 from util.logger import logger
 
@@ -19,6 +18,7 @@ class ClosedConnectionError(Exception):
 
 class ProtocolError(Exception):
     pass
+
 
 class StateError(Exception):
     pass
@@ -174,66 +174,72 @@ class CsaClient:
 
         return f(lines)
 
+    def agree(self, game_condition):
+        """
+        Send agree message.
+
+        State: AGREE_WAITING => GAME_PLAYING when the peer agrees and initial turn is your turn,
+                                MOVE_WAITING when the peer agrees and initial turn is not your turn,
+                                GAME_WAITING when the peer rejects
+        @param game_condition the dictionary of the game condition
+        """
+        self.__assertState(AGREE_WAITING)
+
+        game_id = game_condition['Game_Summary']['Game_ID']
+        init_turn = game_condition['Game_Summary']['To_Move']
+        my_turn = game_condition['Game_Summary']['Your_Turn']
+        res = self.__command('AGREE {}'.format(game_id))
+
+        if res[0].startswith('REJECT:{} by '.format(game_id)):
+            self.state = GAME_WAITING
+            return False, res[0]
+        if res[0] == 'START:{}'.format(game_id):
+            self.state = GAME_PLAYING if init_turn == my_turn else GAME_WAITING
+            return True, res[0]
+        raise ProtocolError(res)
+
+    def reject(self, game_condition):
+        """
+        Send reject message.
+
+        State: AGREE_WAITING => GAME_WAITING
+        """
+        self.__assertState(AGREE_WAITING)
+
+        game_id = game_condition['Game_Summary']['Game_ID']
+        res = self.__command('REJECT {}'.format(game_id))
+
+        if res[0].startswith('REJECT:{} by '.format(game_id)):
+            self.state = GAME_WAITING
+            return res[0]
+        raise ProtocolError(res)
+
+
 
 # TODO
 # def validate_username(username):
 #     pass
 # #数字('0'-'9')、英大文字('A'-'Z')、英小文字('a'-'z')、アンダースコア('_')、ハイフン('-')のいずれかの文字を用 いた32バイト以内
 
-# class CsaRawCommands:
-#     # status
+# result_occasion
+#     #SENNICHITE
+# -- (draw by repetition)
 #
+# #OUTE_SENNICHITE
+# -- (illegal move by repetition)
 #
-#     def __raw_agree(self, game_id=''):
-#         # res = self.__cmd(('AGREE %s' % game_id).rstrip())
-#         res = self.__raw_command(('AGREE{}'.format(' ' + game_id if game_id else '')))
+# #ILLEGAL_MOVE
+# -- (other illegal moves including illegal use of %KACHI)
 #
-#         if res[0].startswith('REJECT:'):
-#             raise ErrorGameRejected(res)
-#         if res[0].startswith('START:'):
-#             if game_id:
-#                 if res[0].split(':')[1] != game_id:
-#                     raise ErrorProtocol(res)
+# #TIME_UP
 #
-#     def agree(self, game_id=''):
-#         """
-#         Send agree message.
-#         Status: agree_waiting => in_game
-#                                  game_waiting (if rejected by peer)
-#         @param game_id the game id to agree
-#         """
-#         try:
-#             self.__raw_agree(game_id)
-#             self.status = CsaClientStatus.in_game
-#         except ErrorGameRejected:
-#             self.status = CsaClientStatus.game_waiting
+# #RESIGN
+# -- (one player resigned by '%TORYO')
 #
-#     def login(self, username, password):
-#         """
-#         Send user name and password, return response.
-#         Status: welcome => game_waiting
+# #JISHOGI
+# -- (one player declared a win by '%KACHI' and the declaration is legal)
 #
-#         @param username
-#         @param password
-#         """
-#         if self.status != CsaClientStatus.welcome:
-#             raise ErrorCommandInappropriate
-#
-#         self.__raw_login(username, password)
-#         self.user = username
-#         self.status = CsaClientStatus.game_waiting
-#
-#     def find_game(self):
-#         """
-#
-#
-#         @return game id
-#         """
-#         if self.status != CsaClientStatus.game_waiting:
-#             raise ErrorCommandInappropriate
-#
-#         self.__raw_await('END Game_Summary')
-#         # TODO: return game id
+
 
 if __name__ == '__main__':
     pass

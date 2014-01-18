@@ -4,7 +4,7 @@
 
 
 import sys
-# import network
+import network.csa_client
 
 
 def main():
