@@ -27,7 +27,7 @@ def setup():
 def teardown(client):
     try:
         client.logout()
-    except (StateError, ProtocolError, ConnectionResetError, ClosedConnectionError):
+    except (AssertionError, ProtocolError, ConnectionResetError, ClosedConnectionError):
         pass
     client.close()
 
@@ -92,7 +92,7 @@ class TestLogin(unittest.TestCase):
         self.assertEqual(self.client.state, CONNECTED)
         self.assertEqual(self.client.login(self.user, 'pass3'), (True, 'LOGIN:{} OK'.format(self.user)))
         self.assertEqual(self.client.state, GAME_WAITING)
-        self.assertRaises(StateError, self.client.login, '{}x'.format(self.user), 'pass4')  # already GameWaiting state
+        self.assertRaises(AssertionError, self.client.login, '{}x'.format(self.user), 'pass4')  # already GameWaiting state
         self.assertEqual(self.client.state, GAME_WAITING)
 
 
@@ -111,9 +111,7 @@ class TestLogout(unittest.TestCase):
         self.assertEqual(self.client.state, CONNECTED)
 
     def test_logout_state_error(self):
-        self.assertEqual(self.client.state, CONNECTED)
-        self.assertRaises(StateError, self.client.logout)
-        self.assertEqual(self.client.state, CONNECTED)
+        self.assertRaises(AssertionError, setup()[0].logout)
 
 
 class TestGetGameCondition(unittest.TestCase):
@@ -161,9 +159,7 @@ class TestGetGameCondition(unittest.TestCase):
         self.assertEqual(self.c1.state, AGREE_WAITING)
 
     def test_get_game_condition_state_error(self):
-        self.assertEqual(self.c1.state, CONNECTED)
-        self.assertRaises(StateError, self.c1.get_game_condition)
-        self.assertEqual(self.c1.state, CONNECTED)
+        self.assertRaises(AssertionError, setup()[0].get_game_condition)
 
 
 class TestAgree(unittest.TestCase):
@@ -178,16 +174,14 @@ class TestAgree(unittest.TestCase):
         self.cond1, _ = self.c1.get_game_condition()
         self.cond2, _ = self.c2.get_game_condition()
         self.game_id = self.cond1['Game_Summary']['Game_ID']
+        assert self.game_id == self.cond2['Game_Summary']['Game_ID']
 
     def tearDown(self):
         teardown(self.c1)
         teardown(self.c2)
 
     def test_agree_state_error(self):
-        c = setup()[0]
-        self.assertEqual(c.state, CONNECTED)
-        self.assertRaises(StateError, c.agree, ({}, ))
-        self.assertEqual(c.state, CONNECTED)
+        self.assertRaises(AssertionError, setup()[0].agree, {})
 
     def test_agree_after_peer_agree(self):
         ret, state2 = a_after_b(partial(CsaClient.agree, self.c1, self.cond1),
@@ -240,16 +234,14 @@ class TestReject(unittest.TestCase):
         self.cond1, _ = self.c1.get_game_condition()
         self.cond2, _ = self.c2.get_game_condition()
         self.game_id = self.cond1['Game_Summary']['Game_ID']
+        assert self.game_id == self.cond2['Game_Summary']['Game_ID']
 
     def tearDown(self):
         teardown(self.c1)
         teardown(self.c2)
 
     def test_reject_state_error(self):
-        c = setup()[0]
-        self.assertEqual(c.state, CONNECTED)
-        self.assertRaises(StateError, c.reject, ({}, ))
-        self.assertEqual(c.state, CONNECTED)
+        self.assertRaises(AssertionError, setup()[0].reject, {})
 
     def test_reject_before_peer_respond(self):
         self.assertEqual(self.c1.reject(self.cond1), ('REJECT:{} by {}'.format(self.game_id, self.user1)))
@@ -280,6 +272,7 @@ class TestMove(unittest.TestCase):
         self.cond1, _ = self.c1.get_game_condition()
         self.cond2, _ = self.c2.get_game_condition()
         self.game_id = self.cond1['Game_Summary']['Game_ID']
+        assert self.game_id == self.cond2['Game_Summary']['Game_ID']
         if self.cond1['Game_Summary']['To_Move'] == self.cond1['Game_Summary']['Your_Turn']:
             self.black = self.c1
             self.white = self.c2
@@ -288,7 +281,7 @@ class TestMove(unittest.TestCase):
             self.white = self.c1
         exec_concurrent(partial(CsaClient.agree, self.c1, self.cond1), partial(CsaClient.agree, self.c2, self.cond2))
         self.black.state = GAME_PLAYING  # Force update because the forked object does not change it.
-        self.white.state = GAME_WAITING
+        self.white.state = MOVE_WAITING
 
     def tearDown(self):
         teardown(self.c1)
@@ -298,11 +291,11 @@ class TestMove(unittest.TestCase):
         self.assertRaises(AssertionError, setup()[0].move, '+7776FU')
 
     def test_move(self):
-        self.assertEqual(self.black.move('+7776FU'), (True, 1, None))
+        self.assertEqual(self.black.move('+7776FU'), (True, 1))
         self.assertEqual(self.black.state, MOVE_WAITING)
 
     def test_move_illegal(self):
-        self.assertEqual(self.black.move('+7777FU'), (False, '#ILLEGAL_MOVE', '#LOSE'))
+        self.assertEqual(self.black.move('+7777FU'), (False, (None, '#ILLEGAL_MOVE', '#LOSE')))
         self.assertEqual(self.black.state, GAME_WAITING)
 
     def test_move_illegal_percent(self):
@@ -311,8 +304,46 @@ class TestMove(unittest.TestCase):
     def test_move_illegal_hash(self):
         self.assertRaisesRegexp(AssertionError, 'move string format error: #', CsaClient.move, self.black, '#')
 
-    # TODO: test SENNICHITE
-    # TODO: test OUTE_SENNICHITE
+    def test_move_sennichite(self):
+        for i in range(3):
+            self.assertEqual(self.black.move('+5958OU'), (True, 1))
+            self.assertEqual(self.white.get_move(), (True, ('+5958OU', 1)))
+            self.assertEqual(self.white.move('-5152OU'), (True, 1))
+            self.assertEqual(self.black.get_move(), (True, ('-5152OU', 1)))
+            self.assertEqual(self.black.move('+5859OU'), (True, 1))
+            self.assertEqual(self.white.get_move(), (True, ('+5859OU', 1)))
+            self.assertEqual(self.white.move('-5251OU'), (True, 1))
+            self.assertEqual(self.black.get_move(), (True, ('-5251OU', 1)))
+
+        self.assertEqual(self.black.move('+5958OU'), (True, 1))
+        self.assertEqual(self.white.get_move(), (True, ('+5958OU', 1)))
+        self.assertIn(self.white.move('-5152OU'),
+                      [(False, (None, '#SENNICHITE', '#DRAW')) for x in [None, 1]])
+
+    def test_move_oute_sennichite(self):
+        self.assertEqual(self.black.move('+7776FU'), (True, 1))
+        self.assertEqual(self.white.get_move(), (True, ('+7776FU', 1)))
+        self.assertEqual(self.white.move('-3334FU'), (True, 1))
+        self.assertEqual(self.black.get_move(), (True, ('-3334FU', 1)))
+        self.assertEqual(self.black.move('+8833UM'), (True, 1))
+        self.assertEqual(self.white.get_move(), (True, ('+8833UM', 1)))
+        self.assertEqual(self.white.move('-5152OU'), (True, 1))
+        self.assertEqual(self.black.get_move(), (True, ('-5152OU', 1)))
+        self.assertEqual(self.black.move('+3343UM'), (True, 1))
+        self.assertEqual(self.white.get_move(), (True, ('+3343UM', 1)))
+
+        for i in range(3):
+            self.assertEqual(self.white.move('-5251OU'), (True, 1))
+            self.assertEqual(self.black.get_move(), (True, ('-5251OU', 1)))
+            self.assertEqual(self.black.move('+4333UM'), (True, 1))
+            self.assertEqual(self.white.get_move(), (True, ('+4333UM', 1)))
+            self.assertEqual(self.white.move('-5152OU'), (True, 1))
+            self.assertEqual(self.black.get_move(), (True, ('-5152OU', 1)))
+            self.assertEqual(self.black.move('+3343UM'), (True, 1))
+            self.assertEqual(self.white.get_move(), (True, ('+3343UM', 1)))
+
+        self.assertIn(self.white.move('-5251OU'),
+                      [(False, (x, '#OUTE_SENNICHITE', '#WIN')) for x in [None, 1]])
 
 
 class TestResign(unittest.TestCase):
@@ -327,6 +358,7 @@ class TestResign(unittest.TestCase):
         self.cond1, _ = self.c1.get_game_condition()
         self.cond2, _ = self.c2.get_game_condition()
         self.game_id = self.cond1['Game_Summary']['Game_ID']
+        assert self.game_id == self.cond2['Game_Summary']['Game_ID']
         if self.cond1['Game_Summary']['To_Move'] == self.cond1['Game_Summary']['Your_Turn']:
             self.black = self.c1
             self.white = self.c2
@@ -335,7 +367,7 @@ class TestResign(unittest.TestCase):
             self.white = self.c1
         exec_concurrent(partial(CsaClient.agree, self.c1, self.cond1), partial(CsaClient.agree, self.c2, self.cond2))
         self.black.state = GAME_PLAYING  # Force update because the forked object does not change it.
-        self.white.state = GAME_WAITING
+        self.white.state = MOVE_WAITING
 
     def tearDown(self):
         teardown(self.c1)
@@ -361,6 +393,7 @@ class TestDeclareWin(unittest.TestCase):
         self.cond1, _ = self.c1.get_game_condition()
         self.cond2, _ = self.c2.get_game_condition()
         self.game_id = self.cond1['Game_Summary']['Game_ID']
+        assert self.game_id == self.cond2['Game_Summary']['Game_ID']
         if self.cond1['Game_Summary']['To_Move'] == self.cond1['Game_Summary']['Your_Turn']:
             self.black = self.c1
             self.white = self.c2
@@ -369,7 +402,7 @@ class TestDeclareWin(unittest.TestCase):
             self.white = self.c1
         exec_concurrent(partial(CsaClient.agree, self.c1, self.cond1), partial(CsaClient.agree, self.c2, self.cond2))
         self.black.state = GAME_PLAYING  # Force update because the forked object does not change it.
-        self.white.state = GAME_WAITING
+        self.white.state = MOVE_WAITING
 
     def tearDown(self):
         teardown(self.c1)
@@ -383,6 +416,12 @@ class TestDeclareWin(unittest.TestCase):
     def test_declare_win_illegal(self):
         self.assertIn(self.black.declare_win(), [(None, '#ILLEGAL_MOVE', '#LOSE'), (1, '#ILLEGAL_MOVE', '#LOSE')])
         self.assertEqual(self.black.state, GAME_WAITING)
+
+
+class TestGetMove(unittest.TestCase):
+    # TODO
+    pass
+
 
 if __name__ == '__main__':
     unittest.main()

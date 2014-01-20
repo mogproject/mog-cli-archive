@@ -20,9 +20,6 @@ class ProtocolError(Exception):
     pass
 
 
-class StateError(Exception):
-    pass
-
 # default server port
 DEFAULT_PORT = 4081
 
@@ -34,8 +31,10 @@ CONNECTED, GAME_WAITING, AGREE_WAITING, MOVE_WAITING, GAME_PLAYING = range(5)
 
 # regexp pattern
 PAT_MOVE = re.compile(r'^[/+-]\d{2}[1-9]{2}[A-Z]{2}$')
-PAT_MOVE_CONFIRM = re.compile(r'^[/+-]\d{2}[1-9]{2}[A-Z]{2},T\d+$')
+PAT_MOVE_CONFIRM = re.compile(r'^([/+-]\d{2}[1-9]{2}[A-Z]{2}),T(\d+)$')
 PAT_CONFIRM = re.compile(r'.*,T(\d+)$')
+PAT_SPECIAL = re.compile(r'^%[A-Z]+$')
+PAT_SPECIAL_CONFIRM = re.compile(r'^(%[A-Z]+)(?:,T(\d+))?$')
 
 
 class CsaClient:
@@ -45,6 +44,7 @@ class CsaClient:
         self.port = port
         self.timeout = timeout
         self.user = None
+        self.buffer = []
 
         # open connection
         self.sock = socket.create_connection((self.host, self.port), self.timeout)
@@ -70,46 +70,66 @@ class CsaClient:
         self.sock.sendall('{}{}'.format(message, LF).encode('utf-8'))
 
     def __receive(self):
-        """The lowest level socket data reading function."""
-        message = self.file.readline()
+        """Read one line from socket or its buffer."""
+        if not self.buffer:
+            self.__sock_read_line()
+        return self.buffer.pop(0)
 
-        if not message:
+    def __sock_read_line_raw(self):
+        """Read from socket until line feed.
+        This is a blocking method."""
+        line = self.file.readline()
+
+        if not line:
             raise ClosedConnectionError
+        return line
 
-        # octets = len(message)
-        decoded = message[:-1].decode('utf-8')
-        logger.debug('{} <- {}'.format(self, repr(decoded)))
+    def __sock_read_line(self):
+        self.__append_buffer(self.__sock_read_line_raw())
 
-        return decoded
-        # return decoded, octets
-
-    def __await(self, until=''):
-        buf = []
-        # octets = 0
+    def __sock_read_all(self):
+        """Receive all the messages without waiting."""
         while True:
-            # m, o = self.__receive()
+            orig_timeout = self.sock.gettimeout()
+            self.sock.settimeout(0)
+            c = self.file.read(1)  # read the first byte
+            self.sock.settimeout(orig_timeout)
+
+            if c is None:
+                break  # no new message
+            elif c == b'':
+                raise ClosedConnectionError
+            else:
+                # found new message
+                self.__append_buffer(c + self.__sock_read_line_raw())
+
+    def __append_buffer(self, data):
+        """Store a message to buffer."""
+        decoded = data[:-1].decode('utf-8')
+        logger.debug('{} <- {}'.format(self, repr(decoded)))
+        self.buffer.append(decoded)
+
+    def __await(self, predicate=lambda x: True):
+        """Wait until receiving the line which satisfies the given predicate."""
+        buf = []
+        while True:
             m = self.__receive()
             buf.append(m)
-            # octets += o
-            if until == '' or until == m:
+            if predicate(m):
                 break
-        assert buf  # buf must be not empty, or throws exception
+        assert buf  # returns non-empty list, or throws exception
         return buf
 
     def __command(self, command):
         self.__send(command)
         return self.__await()
 
-    def __assertState(self, *states):
-        if self.state not in states:
-            raise StateError('current state {} is not in {}'.format(self.state, states))
-
     def login(self, username, password):
         """
         Run in Connected state (before GameWaiting).
         @return tuple of boolean (true if succeeded) and received message
         """
-        self.__assertState(CONNECTED)
+        assert self.state == CONNECTED, 'illegal state: {}'.format(self.state)
         res = self.__command('LOGIN {} {}'.format(username, password))
 
         if res[0] == 'LOGIN:incorrect':
@@ -126,7 +146,7 @@ class CsaClient:
         Run in GameWaiting state.
         @return tuple of boolean (always true) and received message
         """
-        self.__assertState(GAME_WAITING)
+        assert self.state == GAME_WAITING, 'illegal state: {}'.format(self.state)
         res = self.__command('LOGOUT')
         if res[0] != 'LOGOUT:completed':
             raise ProtocolError(res)
@@ -140,9 +160,9 @@ class CsaClient:
         Run in GameWaiting state.
         @return tuple of GameCondition object and received message
         """
-        self.__assertState(GAME_WAITING)
+        assert self.state == GAME_WAITING, 'illegal state: {}'.format(self.state)
 
-        res = self.__await('END Game_Summary')
+        res = self.__await(lambda x: x == 'END Game_Summary')
         cond = self.__parse_game_condition(res)
         self.state = AGREE_WAITING
         return cond, res
@@ -188,7 +208,7 @@ class CsaClient:
                                 GAME_WAITING when the peer rejects
         @param game_condition the dictionary of the game condition
         """
-        self.__assertState(AGREE_WAITING)
+        assert self.state == AGREE_WAITING, 'illegal state: {}'.format(self.state)
 
         game_id = game_condition['Game_Summary']['Game_ID']
         init_turn = game_condition['Game_Summary']['To_Move']
@@ -209,7 +229,7 @@ class CsaClient:
 
         State: AGREE_WAITING => GAME_WAITING
         """
-        self.__assertState(AGREE_WAITING)
+        assert self.state == AGREE_WAITING, 'illegal state: {}'.format(self.state)
 
         game_id = game_condition['Game_Summary']['Game_ID']
         res = self.__command('REJECT {}'.format(game_id))
@@ -231,27 +251,45 @@ class CsaClient:
 
         assert PAT_MOVE.match(move_string), 'move string format error: {}'.format(move_string)
 
+        # Check timeup before move.
+        if self.is_game_end():
+            reason = self.buffer.pop(0)
+            result = self.buffer.pop(0)
+            if (reason, result) not in ['#TIMEUP', '#LOSE']:
+                raise ProtocolError((reason, result))
+            # timeup
+            self.state = GAME_WAITING
+            return False, (None, reason, result)
+
+        # Send move command, then get one line.
         res = self.__command(move_string)
 
-        if res[0].startswith('#'):
-            reason = res[0]
-            result = self.__receive()
+        # Check if confirmation comes.
+        pat_confirm = re.compile(r'^{},T(\d+)$'.format(move_string.replace('+', '\+')))
+        m = pat_confirm.match(res[0])
+        if m:
+            # found confirmation
+            consumed_time = int(m.group(1))
+        else:
+            consumed_time = None
+            self.buffer.insert(0, res[0])  # put back to buffer
+
+        # Check game-end message after move.
+        if self.is_game_end():
+            reason = self.buffer.pop(0)
+            result = self.buffer.pop(0)
             if (reason, result) not in [
-                ('#SENNICHITE', '#DRAW'), ('#OUTE_SENNICHITE', '#LOSE'), ('#ILLEGAL_MOVE', '#LOSE'),
+                ('#SENNICHITE', '#DRAW'), ('#OUTE_SENNICHITE', '#WIN'), ('#ILLEGAL_MOVE', '#LOSE'),
                 ('#TIME_UP', '#LOSE')]:
                 raise ProtocolError((reason, result))
-
             self.state = GAME_WAITING
-            return False, reason, result
+            return False, (consumed_time, reason, result)
 
-        if not PAT_MOVE_CONFIRM.match(res[0]):
+        if not consumed_time:
             raise ProtocolError(res)
 
-        consumed_time = self.__parse_consumed_time(res[0])
-        assert(consumed_time is not None)
-
         self.state = MOVE_WAITING
-        return True, consumed_time, None
+        return True, consumed_time
 
     def __move_special(self, command, possible_results):
         assert self.state == GAME_PLAYING, 'illegal state: {}'.format(self.state)
@@ -287,8 +325,61 @@ class CsaClient:
         return self.__move_special('%KACHI', [('#ILLEGAL_MOVE', '#LOSE'), ('#TIME_UP', '#LOSE'), ('#JISHOGI', '#WIN')])
 
     def get_move(self):
-        # TODO
-        pass
+        """
+        @return (isGameEnded, moveString, consumedTime)  e.g. (False, '+7776FU', 15)
+        """
+        assert self.state == MOVE_WAITING, 'illegal state: {}'.format(self.state)
+
+        # receive one line
+        res = self.__receive()
+
+        # move confirmation
+        if PAT_MOVE_CONFIRM.match(res):
+            command, t = PAT_MOVE_CONFIRM.match(res).groups()
+            consumed_time = int(t)
+            self.state = GAME_PLAYING
+        elif PAT_SPECIAL_CONFIRM.match(res):
+            command, t = PAT_SPECIAL_CONFIRM.match(res).groups()
+            consumed_time = None if t is None else int(t)
+
+            # resign/jishogi commands can be sent twice
+            # e.g. ['%KACHI,T12', '%KACHI', '#JISHOGI', '#LOSE']
+            check = self.__receive()
+            if check != command:
+                self.buffer.insert(0, check)
+        else:
+            # no confirmation, maybe game is end
+            command = None
+            consumed_time = None
+            self.buffer.insert(0, res)  # put back to buffer
+
+        # check if game is end
+        if self.is_game_end():
+            reason = self.buffer.pop(0)
+            result = self.buffer.pop(0)
+            if (command, reason, result) not in [
+                (command, '#SENNICHITE', '#DRAW'),
+                (command, '#OUTE_SENNICHITE', '#LOSE'),
+                (command, '#ILLEGAL_MOVE', '#LOSE'),
+                (None, '#ILLEGAL_MOVE', '#WIN'),
+                (None, '#TIME_UP', '#WIN'),
+                ('%TORYO', '#RESIGN', '#WIN'),
+                ('%KACHI', '#JISHOGI', '#LOSE')]:
+                raise ProtocolError((reason, result))
+            self.state = GAME_WAITING
+            return False, (command, consumed_time, reason, result)
+
+        if not consumed_time:
+            raise ProtocolError(res)
+
+        self.state = GAME_PLAYING
+        return True, (command, consumed_time)
+
+    def is_game_end(self):
+        self.__sock_read_all()
+        if not self.buffer:
+            return False
+        return all(b.startswith('#') for b in self.buffer[:2])
 
 
 if __name__ == '__main__':
