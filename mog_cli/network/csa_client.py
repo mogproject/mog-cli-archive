@@ -27,7 +27,7 @@ DEFAULT_PORT = 4081
 LF = '\n'
 
 # state
-CONNECTED, GAME_WAITING, AGREE_WAITING, MOVE_WAITING, GAME_PLAYING = range(5)
+CONNECTED, GAME_WAITING, AGREE_WAITING, START_WAITING, GAME_TO_MOVE, GAME_TO_WAIT = range(6)
 
 # regexp pattern
 PAT_MOVE = re.compile(r'^[/+-]\d{2}[1-9]{2}[A-Z]{2}$')
@@ -203,31 +203,44 @@ class CsaClient:
         """
         Send agree message.
 
-        State: AGREE_WAITING => GAME_PLAYING when the peer agrees and initial turn is your turn,
-                                MOVE_WAITING when the peer agrees and initial turn is not your turn,
-                                GAME_WAITING when the peer rejects
+        State: AGREE_WAITING => START_WAITING
         @param game_condition the dictionary of the game condition
         """
         assert self.state == AGREE_WAITING, 'illegal state: {}'.format(self.state)
 
         game_id = game_condition['Game_Summary']['Game_ID']
+        self.__send('AGREE {}'.format(game_id))
+        self.state = START_WAITING
+
+    def get_agreement(self, game_condition):
+        """
+        Receive peer's agree or reject message.
+
+        State: AGREE_WAITING => GAME_TO_MOVE when the peer agrees and initial turn is your turn,
+                                GAME_TO_WAIT when the peer agrees and initial turn is not your turn,
+                                GAME_WAITING when the peer rejects
+        @param game_condition the dictionary of the game condition
+        """
+        assert self.state == START_WAITING, 'illegal state: {}'.format(self.state)
+
+        game_id = game_condition['Game_Summary']['Game_ID']
         init_turn = game_condition['Game_Summary']['To_Move']
         my_turn = game_condition['Game_Summary']['Your_Turn']
-        res = self.__command('AGREE {}'.format(game_id))
 
-        if res[0].startswith('REJECT:{} by '.format(game_id)):
+        res = self.__receive()
+        if res.startswith('REJECT:{} by '.format(game_id)):
             self.state = GAME_WAITING
-            return False, res[0]
-        if res[0] == 'START:{}'.format(game_id):
-            self.state = GAME_PLAYING if init_turn == my_turn else GAME_WAITING
-            return True, res[0]
+            return False, res
+        if res == 'START:{}'.format(game_id):
+            self.state = GAME_TO_MOVE if init_turn == my_turn else GAME_TO_WAIT
+            return True, res
         raise ProtocolError(res)
 
     def reject(self, game_condition):
         """
         Send reject message.
 
-        State: AGREE_WAITING => GAME_WAITING
+        State: START_WAITING => GAME_WAITING
         """
         assert self.state == AGREE_WAITING, 'illegal state: {}'.format(self.state)
 
@@ -247,7 +260,7 @@ class CsaClient:
             return None
 
     def move(self, move_string):
-        assert self.state == GAME_PLAYING, 'illegal state: {}'.format(self.state)
+        assert self.state == GAME_TO_MOVE, 'illegal state: {}'.format(self.state)
 
         assert PAT_MOVE.match(move_string), 'move string format error: {}'.format(move_string)
 
@@ -288,11 +301,11 @@ class CsaClient:
         if not consumed_time:
             raise ProtocolError(res)
 
-        self.state = MOVE_WAITING
+        self.state = GAME_TO_WAIT
         return True, consumed_time
 
     def __move_special(self, command, possible_results):
-        assert self.state == GAME_PLAYING, 'illegal state: {}'.format(self.state)
+        assert self.state == GAME_TO_MOVE, 'illegal state: {}'.format(self.state)
 
         res = self.__command(command)
 
@@ -328,7 +341,7 @@ class CsaClient:
         """
         @return (isGameEnded, moveString, consumedTime)  e.g. (False, '+7776FU', 15)
         """
-        assert self.state == MOVE_WAITING, 'illegal state: {}'.format(self.state)
+        assert self.state == GAME_TO_WAIT, 'illegal state: {}'.format(self.state)
 
         # receive one line
         res = self.__receive()
@@ -337,7 +350,7 @@ class CsaClient:
         if PAT_MOVE_CONFIRM.match(res):
             command, t = PAT_MOVE_CONFIRM.match(res).groups()
             consumed_time = int(t)
-            self.state = GAME_PLAYING
+            self.state = GAME_TO_MOVE
         elif PAT_SPECIAL_CONFIRM.match(res):
             command, t = PAT_SPECIAL_CONFIRM.match(res).groups()
             consumed_time = None if t is None else int(t)
@@ -360,7 +373,7 @@ class CsaClient:
             if (command, reason, result) not in [
                 (command, '#SENNICHITE', '#DRAW'),
                 (command, '#OUTE_SENNICHITE', '#LOSE'),
-                (command, '#ILLEGAL_MOVE', '#LOSE'),
+                (command, '#ILLEGAL_MOVE', '#WIN'),
                 (None, '#ILLEGAL_MOVE', '#WIN'),
                 (None, '#TIME_UP', '#WIN'),
                 ('%TORYO', '#RESIGN', '#WIN'),
@@ -372,7 +385,7 @@ class CsaClient:
         if not consumed_time:
             raise ProtocolError(res)
 
-        self.state = GAME_PLAYING
+        self.state = GAME_TO_MOVE
         return True, (command, consumed_time)
 
     def is_game_end(self):
