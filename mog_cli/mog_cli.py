@@ -4,11 +4,11 @@
 
 
 import sys
-import network.csa_client
-
+from shell import Shell
 
 def main():
-    pass
+    sh = Shell()
+    sh.start()
 
 
 if __name__ == '__main__':

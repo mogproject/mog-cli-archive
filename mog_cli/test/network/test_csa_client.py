@@ -101,7 +101,7 @@ class TestLogin(unittest.TestCase):
         self.assertEqual(self.client.state, CONNECTED)
         self.assertEqual(self.client.login(self.user, 'pass3'), (True, 'LOGIN:{} OK'.format(self.user)))
         self.assertEqual(self.client.state, GAME_WAITING)
-        self.assertRaises(AssertionError, self.client.login, '{}x'.format(self.user), 'pass4')  # already GameWaiting state
+        self.assertRaises(AssertionError, self.client.login, '{}x'.format(self.user), 'pass4')  # already game-waiting
         self.assertEqual(self.client.state, GAME_WAITING)
 
 
@@ -379,6 +379,7 @@ class TestMove(unittest.TestCase):
 
         self.assertEqual(self.black.state, GAME_WAITING)
         self.assertEqual(self.white.state, GAME_WAITING)
+
 
 class TestResign(unittest.TestCase):
 
