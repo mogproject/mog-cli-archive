@@ -8,8 +8,17 @@ class Game:
     def __init__(self, game_condition):
         # TODO
         self.cond = game_condition
-        self.turn = '+'
+
         self.history = []
+        self.id = self.cond['Game_Summary']['Game_ID']
+        self.to_move = self.cond['Game_Summary']['To_Move']
+        self.my_turn = self.cond['Game_Summary']['Your_Turn']
 
     def __str__(self):
-        return self.conf
+        return self.cond
+
+    def is_my_turn(self):
+        return self.to_move == self.my_turn
+
+    def move(self, move_str, elapsed_time=0):
+        pass

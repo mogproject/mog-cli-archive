@@ -43,7 +43,7 @@ class Shell:
     def set_mode(self, mode):
         if mode == MODE_INIT:
             if self.game:
-                self.prompt = lambda s: '[not connected]{}{:03d}(end)>'.format(s.game.turn, len(s.game.history))
+                self.prompt = lambda s: '[not connected]{}{:03d}(end)> '.format(s.game.turn, len(s.game.history))
             else:
                 self.prompt = lambda s: '[not connected]> '
             self.__set_commands(
@@ -52,7 +52,8 @@ class Shell:
                 ExitCommand(),
             )
         elif mode == MODE_NETWORK:
-            self.prompt = lambda s: '[{}:{}]{}{:03d}(end)>'.format(s.csa_client.host, s.csa_client.port, s.game.turn, len(s.game.history))
+            self.prompt = lambda s: '[{}:{}]{}{:03d}> '.format(
+                s.csa_client.host, s.csa_client.port, s.game.to_move, len(s.game.history))
             self.__set_commands(
                 HelpCommand(),
                 ExitCommand(),
@@ -64,10 +65,10 @@ class Shell:
 
     def start(self):
         while True:
-            try:
-                self.output.write(self.prompt(self))
-                self.output.flush()
+            self.output.write(self.prompt(self))
+            self.output.flush()
 
+            try:
                 line = self.input.readline()
                 if not line:  # got EOF
                     raise ShellExit
