@@ -3,7 +3,7 @@
 """Interactive shell."""
 
 import sys
-from command.command import *
+from command import *
 
 
 class ShellExit(Exception):
@@ -93,6 +93,19 @@ class Shell:
                 break
             except Exception as e:
                 self.output.write('Exception: {}\n'.format(repr(e)))
+
+    def interactive_input(self, prompt, default=None, assertion=lambda: True):
+        while True:
+            ret = input('{} [{}]? : '.format(prompt, default))
+            if ret == '' and default is not None:
+                ret = default
+            if assertion(ret):
+                break
+            self.output.write('Invalid input: {}\n'.format(ret))
+        return ret
+
+    IS_NOT_EMPTY = lambda s: s.strip() != ''
+    IS_DIGIT = lambda s: s.isdigit()
 
 
 if __name__ == '__main__':
