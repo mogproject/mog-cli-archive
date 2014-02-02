@@ -10,7 +10,7 @@ from network.csa_client import *
 from functools import partial
 from test_util import *
 
-SHOGI_SERVER_HOST = os.environ.get('DOCKER_HOST', 'localhost')
+SHOGI_SERVER_HOST = os.environ.get('SHOGI_SERVER_HOST', 'localhost')
 
 # logger.setLevel(logging.INFO)
 

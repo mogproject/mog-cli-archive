@@ -19,6 +19,8 @@ class ClosedConnectionError(Exception):
 class ProtocolError(Exception):
     pass
 
+# default server host
+DEFAULT_HOST = 'localhost'
 
 # default server port
 DEFAULT_PORT = 4081
@@ -206,6 +208,7 @@ class CsaClient:
         State: AGREE_WAITING => START_WAITING
         @param game_condition the dictionary of the game condition
         """
+        #TODO: param game_condition -> game_id
         assert self.state == AGREE_WAITING, 'illegal state: {}'.format(self.state)
 
         game_id = game_condition['Game_Summary']['Game_ID']
