@@ -69,9 +69,10 @@ class Shell:
                 self.csa_client.host, self.csa_client.port, self.game.to_move, len(self.game.history))
             self.__set_commands(
                 HelpCommand(),
-                ExitCommand(),
                 HistoryCommand(),
                 MoveCommand(),
+                ResignCommand(),
+                WinCommand(),
             )
         elif mode == MODE_STANDALONE:
             # TODO: implement
@@ -112,8 +113,10 @@ class Shell:
 
                 self.commands[cmd_name_upper].run(*cmd_args)(self)
 
-            except (ShellExit, EOFError, KeyboardInterrupt):
+            except (ShellExit, EOFError):
                 break
+            except KeyboardInterrupt:
+                pass
             except Exception as e:
                 logger.debug(traceback.format_exc())
                 self.output.write('Exception: {}\n'.format(repr(e)))

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""description"""
+"""Login command"""
 
 import re
 from network.csa_client import CsaClient, DEFAULT_PORT
@@ -11,22 +11,13 @@ import command
 
 class LoginCommand(command.Command):
     """Login to the server"""
+#TODO: Implement help for login command
+    # Username should be composed by numbers(0-9), alphabets(A-Za-z), underscores(_) and hyphens(-).
+    # Username and password are 1 to 32 byte length, inclusive.
 
-    def alias(self):
-        return ['LOGIN']
-
-    def run(self, *args):
-        # TODO
-        def f(shell):
-            raise NotImplementedError
-        return f
-
-
-class LoginCommand(command.Command):
-    """Login to the server"""
-
-    # TODO: check the specification
-    PAT_LOGIN = re.compile(r'LOGIN(?:\s+(.+)(?:[:](\d+))?(?:\s+([0-9A-Za-z]+))?(?:\s+(.+))?)')
+    PAT_USERNAME = re.compile(r'^[_\-0-9A-Za-z]{1,32}$')
+    PAT_PASSWORD = re.compile(r'^.{1,32}$')
+    PAT_LOGIN = re.compile(r'LOGIN(?:\s+(.+)(?:[:](\d+))?(?:\s+([_\-0-9A-Za-z]+))?(?:\s+(.+))?)')
     PAT_HOST_PORT = re.compile(r'^([^:]+)(?:[:](\d+))?$')
 
     def alias(self):
@@ -56,8 +47,14 @@ class LoginCommand(command.Command):
         username = username or sh.default_user
         password = password or sh.default_pass
 
+        # check requirements
         if None in [host, port, username, password]:
             raise shell.CommandArgumentsError
+
+        if not self.PAT_USERNAME.match(username):
+            raise shell.CommandArgumentsError('invalid username: {}'.format(username))
+        if not self.PAT_PASSWORD.match(password):
+            raise shell.CommandArgumentsError('invalid password: {}'.format(password))
 
         return host, port, username, password
 
@@ -69,19 +66,22 @@ class LoginCommand(command.Command):
             if not ret_login[0]:
                 raise shell.CommandFailedError('failed to login')
 
+            sh.sys_message('waiting for peer...')
             game_cond = c.get_game_condition()[0]
             game = Game(game_cond)
 
+            # TODO: print game condition
             ret = input('agree to this game? [Y/n]: ')
 
             if ret == '' or ret.upper() == 'Y':
                 c.agree(game_cond)
+                sh.sys_message('waiting for agreement...')
                 ret_agree = c.get_agreement(game_cond)
                 if not ret_agree[0]:
-                    sh.output.write('Game was rejected by peer.\n')
+                    sh.sys_message('game was rejected by peer.')
                     return
 
-                sh.output.write('Game started: {}\n'.format(game.id))
+                sh.sys_message('game started: {}'.format(game.id))
 
                 sh.game = game
                 sh.csa_client = c
@@ -89,29 +89,6 @@ class LoginCommand(command.Command):
 
                 if not game.is_my_turn():
                     command.MoveCommand.wait_move(sh)
-
-                    #
-                    # sh.output.write('Waiting...\n')
-                    # is_continue, info = c.get_move()
-                    # if is_continue:
-                    #     m = Move(*info)
-                    #     sh.output.write('{}{}\n'.format(sh.prompt(), m))
-                    #     game.move(m)
-                    # else:
-                    #     cmd, tm, reason, result = info
-                    #
-                    #     sh.output.write('{}{}\n'.format(sh.prompt(), reason))
-                    #     # TODO: append to move history
-                    #     sh.output.write('\n'.join(['*' * 80, '*' + {
-                    #         '#WIN': 'YOU WIN!', '#LOSE': 'YOU LOSE!', '#DRAW': 'DRAW!'
-                    #     }[result].center(78) + '*', '*' * 80, '']))
-                    #
-                    #     sh.set_mode(shell.MODE_INIT)
-                    #     try:
-                    #         c.logout()
-                    #     except network.csa_client.ClosedConnectionError:
-                    #         pass  # ignore this
-
             else:
                 c.reject(game_cond)
                 sh.csa_client = None

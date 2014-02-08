@@ -29,7 +29,7 @@ class MoveCommand(Command):
         return f
 
     @staticmethod
-    def __move(sh, func):
+    def move_common(sh, func):
         """inner function for move/wait_move"""
         def f(m):
             sh.sys_message('move: {}'.format(m))
@@ -57,11 +57,11 @@ class MoveCommand(Command):
 
     @staticmethod
     def move(sh, m):
-        return MoveCommand.__move(sh, functools.partial(sh.csa_client.move, m.move_str))
+        return MoveCommand.move_common(sh, functools.partial(sh.csa_client.move, m.move_str))
 
 
     @staticmethod
     def wait_move(sh):
         sh.sys_message("waiting for peer's move...")
-        return MoveCommand.__move(sh, sh.csa_client.get_move)
+        return MoveCommand.move_common(sh, sh.csa_client.get_move)
 

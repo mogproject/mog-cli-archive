@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""description"""
+"""Resign command"""
 
-from command.base_command import Command
-import shell
+from command import Command, MoveCommand
 
 
 class ResignCommand(Command):
+    """Resign this game"""
+
     def alias(self):
         return ['RESIGN']
 
     def run(self, *args):
-        # TODO
-        def f(shell):
-            raise NotImplementedError
-        return f
+        return lambda sh: MoveCommand.move_common(sh, sh.csa_client.resign)

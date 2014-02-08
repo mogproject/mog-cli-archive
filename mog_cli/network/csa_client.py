@@ -206,7 +206,6 @@ class CsaClient:
         State: AGREE_WAITING => START_WAITING
         @param game_condition the dictionary of the game condition
         """
-        #TODO: param game_condition -> game_id
         assert self.state == AGREE_WAITING, 'illegal state: {}'.format(self.state)
 
         game_id = game_condition['Game_Summary']['Game_ID']
