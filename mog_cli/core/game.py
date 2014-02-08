@@ -6,7 +6,7 @@
 class Game:
 
     def __init__(self, game_condition):
-        # TODO
+        # TODO parse condition and create initial state (and history if need)
         self.cond = game_condition
 
         self.history = []
@@ -20,5 +20,5 @@ class Game:
     def is_my_turn(self):
         return self.to_move == self.my_turn
 
-    def move(self, move_str, elapsed_time=0):
-        pass
+    def move(self, mv):
+        self.history.append(mv)

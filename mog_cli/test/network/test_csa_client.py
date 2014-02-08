@@ -335,16 +335,16 @@ class TestMove(unittest.TestCase):
 
     def test_move(self):
         # includes test of get_move method
-        self.assertEqual(self.black.move('+7776FU'), (True, 1))
-        self.assertEqual(self.white.get_move(), (True, ('+7776FU', 1)))
+        self.assertEqual(self.black.move('+7776FU'), ('+7776FU', 1, None, None))
+        self.assertEqual(self.white.get_move(), ('+7776FU', 1, None, None))
         self.assertEqual(self.black.state, GAME_TO_WAIT)
         self.assertEqual(self.white.state, GAME_TO_MOVE)
 
     def test_move_illegal(self):
         # includes test of get_move method
-        self.assertEqual(self.black.move('+7777FU'), (False, (None, '#ILLEGAL_MOVE', '#LOSE')))
+        self.assertEqual(self.black.move('+7777FU'), ('+7777FU', None, '#ILLEGAL_MOVE', '#LOSE'))
         self.assertIn(self.white.get_move(),
-                      [(False, (x, y, '#ILLEGAL_MOVE', '#WIN')) for x, y in [(None, None), ('+7777FU', 1)]])
+                      [(x, y, '#ILLEGAL_MOVE', '#WIN') for x, y in [(None, None), ('+7777FU', 1)]])
         self.assertEqual(self.black.state, GAME_WAITING)
         self.assertEqual(self.white.state, GAME_WAITING)
 
@@ -359,9 +359,9 @@ class TestMove(unittest.TestCase):
         replay_history(self.black, self.white, ['+5958OU'] + ['-5152OU', '+5859OU', '-5251OU', '+5958OU'] * 3)
 
         self.assertIn(self.white.move('-5152OU'),
-                      [(False, (x, '#SENNICHITE', '#DRAW')) for x in [None, 1]])
+                      [('-5152OU', x, '#SENNICHITE', '#DRAW') for x in [None, 1]])
         self.assertIn(self.black.get_move(),
-                      [(False, (x, y, '#SENNICHITE', '#DRAW')) for x, y in [(None, None), ('-5152OU', 1)]])
+                      [(x, y, '#SENNICHITE', '#DRAW') for x, y in [(None, None), ('-5152OU', 1)]])
 
         self.assertEqual(self.black.state, GAME_WAITING)
         self.assertEqual(self.white.state, GAME_WAITING)
@@ -373,9 +373,9 @@ class TestMove(unittest.TestCase):
         ] + ['-5251OU', '+4333UM', '-5152OU', '+3343UM'] * 3)
 
         self.assertIn(self.white.move('-5251OU'),
-                      [(False, (x, '#OUTE_SENNICHITE', '#WIN')) for x in [None, 1]])
+                      [('-5251OU', x, '#OUTE_SENNICHITE', '#WIN') for x in [None, 1]])
         self.assertIn(self.black.get_move(),
-                      [(False, (x, y, '#OUTE_SENNICHITE', '#LOSE')) for x, y in [(None, None), ('-5251OU', 1)]])
+                      [(x, y, '#OUTE_SENNICHITE', '#LOSE') for x, y in [(None, None), ('-5251OU', 1)]])
 
         self.assertEqual(self.black.state, GAME_WAITING)
         self.assertEqual(self.white.state, GAME_WAITING)
@@ -414,9 +414,9 @@ class TestResign(unittest.TestCase):
 
     def test_resign(self):
         # includes test of get_move method
-        self.assertIn(self.black.resign(), [(x, '#RESIGN', '#LOSE') for x in [None, 1]])
+        self.assertIn(self.black.resign(), [('%TORYO', x, '#RESIGN', '#LOSE') for x in [None, 1]])
         self.assertIn(self.white.get_move(),
-                      [(False, ('%TORYO', x, '#RESIGN', '#WIN')) for x in [None, 1]])
+                      [('%TORYO', x, '#RESIGN', '#WIN') for x in [None, 1]])
         self.assertEqual(self.black.state, GAME_WAITING)
         self.assertEqual(self.white.state, GAME_WAITING)
 
@@ -465,16 +465,16 @@ class TestDeclareWin(unittest.TestCase):
             '+0012KA', '-1415OU', '+0042KI', '-1514OU', '+0052KY', '-1415OU', '+0073FU', '-1514OU',
         ])
 
-        self.assertEqual(self.black.declare_win(), (1, '#JISHOGI', '#WIN'))
-        self.assertEqual(self.white.get_move(), (False, ('%KACHI', 1, '#JISHOGI', '#LOSE')))
+        self.assertEqual(self.black.declare_win(), ('%KACHI', 1, '#JISHOGI', '#WIN'))
+        self.assertEqual(self.white.get_move(), ('%KACHI', 1, '#JISHOGI', '#LOSE'))
         self.assertEqual(self.black.state, GAME_WAITING)
         self.assertEqual(self.white.state, GAME_WAITING)
 
     def test_declare_win_illegal(self):
         # includes test of get_move method
-        self.assertIn(self.black.declare_win(), [(x, '#ILLEGAL_MOVE', '#LOSE') for x in [None, 1]])
+        self.assertIn(self.black.declare_win(), [('%KACHI', x, '#ILLEGAL_MOVE', '#LOSE') for x in [None, 1]])
         self.assertIn(self.white.get_move(),
-                      [(False, (x, y, '#ILLEGAL_MOVE', '#WIN')) for x, y in [(None, None), ('%KACHI', 1)]])
+                      [(x, y, '#ILLEGAL_MOVE', '#WIN') for x, y in [(None, None), ('%KACHI', 1)]])
         self.assertEqual(self.black.state, GAME_WAITING)
         self.assertEqual(self.white.state, GAME_WAITING)
 

@@ -3,7 +3,9 @@
 """Interactive shell."""
 
 import sys
+import traceback
 from command import *
+from util.logger import logger
 
 
 class ShellExit(Exception):
@@ -27,11 +29,18 @@ MODE_INIT, MODE_NETWORK, MODE_STANDALONE = range(3)
 
 class Shell:
 
-    def __init__(self, input=sys.stdin, output=sys.stdout):
+    def __init__(self, default_host, default_port, default_user, default_pass, input=sys.stdin, output=sys.stdout):
         self.input = input
         self.output = output
         self.game = None
         self.csa_client = None
+
+        # default parameters for CsaClient
+        self.default_host = default_host
+        self.default_port = default_port
+        self.default_user = default_user
+        self.default_pass = default_pass
+
         self.set_mode(MODE_INIT)
 
     def __set_commands(self, *commands):
@@ -43,29 +52,42 @@ class Shell:
     def set_mode(self, mode):
         if mode == MODE_INIT:
             if self.game:
-                self.prompt = lambda s: '[not connected]{}{:03d}(end)> '.format(s.game.turn, len(s.game.history))
+                # self.prompt = lambda s: '[not connected]{}{:03d}(end)> '.format(s.game.turn, len(s.game.history))
+                self.prompt = lambda: '[not connected]{}{:03d}(end)> '.format(self.game.to_move, len(self.game.history))
             else:
-                self.prompt = lambda s: '[not connected]> '
+                # self.prompt = lambda s: '[not connected]> '
+                self.prompt = lambda: '[not connected]> '
             self.__set_commands(
-                LoginCommand(),
                 HelpCommand(),
                 ExitCommand(),
+                LoginCommand(),
+                HistoryCommand(),
             )
         elif mode == MODE_NETWORK:
-            self.prompt = lambda s: '[{}:{}]{}{:03d}> '.format(
-                s.csa_client.host, s.csa_client.port, s.game.to_move, len(s.game.history))
+            # self.prompt = lambda s: '[{}:{}]{}{:03d}> '.format(
+            self.prompt = lambda: '[{}:{}]{}{:03d}> '.format(
+                self.csa_client.host, self.csa_client.port, self.game.to_move, len(self.game.history))
             self.__set_commands(
                 HelpCommand(),
                 ExitCommand(),
+                HistoryCommand(),
                 MoveCommand(),
             )
         elif mode == MODE_STANDALONE:
             # TODO: implement
             pass
 
+    def sys_message(self, message):
+        self.output.write('### {}\n'.format(message))
+
+    def game_end_banner(self, result):
+        width = 80
+        s = {'#WIN': 'YOU WIN!', '#LOSE': 'YOU LOSE!', '#DRAW': 'DRAW!'}[result]
+        self.output.write('\n'.join(['*' * width, '*' + s.center(width - 2) + '*', '*' * width, '']))
+
     def start(self):
         while True:
-            self.output.write(self.prompt(self))
+            self.output.write(self.prompt())
             self.output.flush()
 
             try:
@@ -90,9 +112,10 @@ class Shell:
 
                 self.commands[cmd_name_upper].run(*cmd_args)(self)
 
-            except (ShellExit, EOFError):
+            except (ShellExit, EOFError, KeyboardInterrupt):
                 break
             except Exception as e:
+                logger.debug(traceback.format_exc())
                 self.output.write('Exception: {}\n'.format(repr(e)))
 
     def interactive_input(self, prompt, default=None, assertion=lambda: True):

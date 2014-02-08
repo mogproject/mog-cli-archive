@@ -19,8 +19,6 @@ class ClosedConnectionError(Exception):
 class ProtocolError(Exception):
     pass
 
-# default server host
-DEFAULT_HOST = 'localhost'
 
 # default server port
 DEFAULT_PORT = 4081
@@ -263,6 +261,13 @@ class CsaClient:
             return None
 
     def move(self, move_string):
+        """
+        @return tuple of (move_string, elapsed_time, game_end_reason, game_end_result)
+                game_end_reason and game_end_result are None when game is continued.
+
+                e.g. ('+7776FU', 15, None, None)
+                     ('+7776FU', 3, '#TIMEUP', '#LOSE')
+        """
         assert self.state == GAME_TO_MOVE, 'illegal state: {}'.format(self.state)
 
         assert PAT_MOVE.match(move_string), 'move string format error: {}'.format(move_string)
@@ -275,7 +280,7 @@ class CsaClient:
                 raise ProtocolError((reason, result))
             # timeup
             self.state = GAME_WAITING
-            return False, (None, reason, result)
+            return move_string, None, reason, result
 
         # Send move command, then get one line.
         res = self.__command(move_string)
@@ -299,13 +304,13 @@ class CsaClient:
                 ('#TIME_UP', '#LOSE')]:
                 raise ProtocolError((reason, result))
             self.state = GAME_WAITING
-            return False, (consumed_time, reason, result)
+            return move_string, consumed_time, reason, result
 
         if not consumed_time:
             raise ProtocolError(res)
 
         self.state = GAME_TO_WAIT
-        return True, consumed_time
+        return move_string, consumed_time, None, None
 
     def __move_special(self, command, possible_results):
         assert self.state == GAME_TO_MOVE, 'illegal state: {}'.format(self.state)
@@ -332,17 +337,30 @@ class CsaClient:
             raise ProtocolError((reason, result))
 
         self.state = GAME_WAITING
-        return consumed_time, reason, result
+        return command, consumed_time, reason, result
 
     def resign(self):
+        """
+        @return tuple of (move_string, elapsed_time, game_end_reason, game_end_result)
+                e.g. ('%TORYO', 3, '#RESIGN', '#LOSE')
+        """
         return self.__move_special('%TORYO', [('#RESIGN', '#LOSE'), ('#TIME_UP', '#LOSE')])
 
     def declare_win(self):
+        """
+        @return tuple of (move_string, elapsed_time, game_end_reason, game_end_result)
+                e.g. ('%KACHI', 3, '#JISHOGI', '#WIN')
+                     ('%KACHI', 3, '#ILLEGAL_MOVE', '#LOSE')
+        """
         return self.__move_special('%KACHI', [('#ILLEGAL_MOVE', '#LOSE'), ('#TIME_UP', '#LOSE'), ('#JISHOGI', '#WIN')])
 
     def get_move(self):
         """
-        @return (isGameEnded, moveString, consumedTime)  e.g. (False, '+7776FU', 15)
+        @return tuple of (move_string, elapsed_time, game_end_reason, game_end_result)
+                game_end_reason and game_end_result are None when game is continued.
+
+                e.g. ('+7776FU', 15, None, None)
+                     ('%TORYO', 3, '#RESIGN', '#WIN')
         """
         assert self.state == GAME_TO_WAIT, 'illegal state: {}'.format(self.state)
 
@@ -383,13 +401,13 @@ class CsaClient:
                 ('%KACHI', '#JISHOGI', '#LOSE')]:
                 raise ProtocolError((reason, result))
             self.state = GAME_WAITING
-            return False, (command, consumed_time, reason, result)
+            return command, consumed_time, reason, result
 
         if not consumed_time:
             raise ProtocolError(res)
 
         self.state = GAME_TO_MOVE
-        return True, (command, consumed_time)
+        return command, consumed_time, None, None
 
     def is_game_end(self):
         self.__sock_read_all()

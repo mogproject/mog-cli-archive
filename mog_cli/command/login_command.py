@@ -3,13 +3,13 @@
 """description"""
 
 import re
-from network.csa_client import CsaClient, DEFAULT_HOST, DEFAULT_PORT
+from network.csa_client import CsaClient, DEFAULT_PORT
 import shell
-from core.game import Game
-from command.base_command import Command
+from core import Move, Game
+import command
 
 
-class LoginCommand(Command):
+class LoginCommand(command.Command):
     """Login to the server"""
 
     def alias(self):
@@ -22,7 +22,7 @@ class LoginCommand(Command):
         return f
 
 
-class LoginCommand(Command):
+class LoginCommand(command.Command):
     """Login to the server"""
 
     # TODO: check the specification
@@ -32,13 +32,18 @@ class LoginCommand(Command):
     def alias(self):
         return ['LOGIN']
 
-    def _parse_args(self, host_port, username, password, *args):
+    def _parse_args(self, sh, host_port=None, username=None, password=None, *args):
         if args:
             raise shell.CommandArgumentsError
 
         if host_port is None:
-            host = DEFAULT_HOST
-            port = DEFAULT_PORT
+            host = sh.default_host
+            port = sh.default_port or DEFAULT_PORT
+            if host is None:
+                # prompt
+
+                raise NotImplementedError
+
             # host = interactive_input('hostname', DEFAULT_HOST, IS_NOT_EMPTY)
             # port = int(interactive_input('port', DEFAULT_PORT, IS_DIGIT))
         else:
@@ -48,15 +53,17 @@ class LoginCommand(Command):
             port = DEFAULT_PORT if m.group(2) is None else int(m.group(2))
             host = m.group(1)
 
-        # username = interactive_input('username', None, IS_NOT_EMPTY) if username is None else username
-        # password = interactive_input('password', None, IS_NOT_EMPTY) if password is None else password
+        username = username or sh.default_user
+        password = password or sh.default_pass
+
+        if None in [host, port, username, password]:
+            raise shell.CommandArgumentsError
 
         return host, port, username, password
 
     def run(self, *args):
-        host, port, username, password = self._parse_args(*args)
-
         def f(sh):
+            host, port, username, password = self._parse_args(sh, *args)
             c = CsaClient(host, port)
             ret_login = c.login(username, password)
             if not ret_login[0]:
@@ -75,20 +82,38 @@ class LoginCommand(Command):
                     return
 
                 sh.output.write('Game started: {}\n'.format(game.id))
-                if not game.is_my_turn():
-                    sh.output.write('Waiting...\n')
-                    is_continue, info = c.get_move()
-                    if is_continue:
-                        m, tm = info
-                        game.move(m, tm)
-                    else:
-                        # TODO: append to history
-                        c.logout()
 
                 sh.game = game
                 sh.csa_client = c
                 sh.set_mode(shell.MODE_NETWORK)
+
+                if not game.is_my_turn():
+                    command.MoveCommand.wait_move(sh)
+
+                    #
+                    # sh.output.write('Waiting...\n')
+                    # is_continue, info = c.get_move()
+                    # if is_continue:
+                    #     m = Move(*info)
+                    #     sh.output.write('{}{}\n'.format(sh.prompt(), m))
+                    #     game.move(m)
+                    # else:
+                    #     cmd, tm, reason, result = info
+                    #
+                    #     sh.output.write('{}{}\n'.format(sh.prompt(), reason))
+                    #     # TODO: append to move history
+                    #     sh.output.write('\n'.join(['*' * 80, '*' + {
+                    #         '#WIN': 'YOU WIN!', '#LOSE': 'YOU LOSE!', '#DRAW': 'DRAW!'
+                    #     }[result].center(78) + '*', '*' * 80, '']))
+                    #
+                    #     sh.set_mode(shell.MODE_INIT)
+                    #     try:
+                    #         c.logout()
+                    #     except network.csa_client.ClosedConnectionError:
+                    #         pass  # ignore this
+
             else:
                 c.reject(game_cond)
+                sh.csa_client = None
 
         return f
