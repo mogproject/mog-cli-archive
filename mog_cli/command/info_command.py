@@ -3,7 +3,6 @@
 """description"""
 
 from command.base_command import Command
-import shell
 
 
 class InfoCommand(Command):
@@ -11,4 +10,4 @@ class InfoCommand(Command):
         return ['INFO', 'I']
 
     def run(self, *args):
-        return lambda sh: sh.output.write(self.game + '\n')
+        return lambda sh: sh.output.write('{}\n'.format(sh.game))

@@ -53,7 +53,8 @@ class Shell:
         if mode == MODE_INIT:
             if self.game:
                 # self.prompt = lambda s: '[not connected]{}{:03d}(end)> '.format(s.game.turn, len(s.game.history))
-                self.prompt = lambda: '[not connected]{}{:03d}(end)> '.format(self.game.to_move, len(self.game.history))
+                self.prompt = lambda: '[not connected]{}{:03d}(end)> '.format(
+                    self.game.state.to_move, len(self.game.history))
             else:
                 # self.prompt = lambda s: '[not connected]> '
                 self.prompt = lambda: '[not connected]> '
@@ -62,14 +63,16 @@ class Shell:
                 ExitCommand(),
                 LoginCommand(),
                 HistoryCommand(),
+                InfoCommand(),
             )
         elif mode == MODE_NETWORK:
             # self.prompt = lambda s: '[{}:{}]{}{:03d}> '.format(
-            self.prompt = lambda: '[{}:{}]{}{:03d}> '.format(
-                self.csa_client.host, self.csa_client.port, self.game.to_move, len(self.game.history))
+            self.prompt = lambda: '[{}:{}]{:03d}> '.format(
+                self.csa_client.host, self.csa_client.port, len(self.game.history))
             self.__set_commands(
                 HelpCommand(),
                 HistoryCommand(),
+                InfoCommand(),
                 MoveCommand(),
                 ResignCommand(),
                 WinCommand(),

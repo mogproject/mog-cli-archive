@@ -70,7 +70,8 @@ class LoginCommand(command.Command):
             game_cond = c.get_game_condition()[0]
             game = Game(game_cond)
 
-            # TODO: print game condition
+            # print game condition
+            sh.output.write('{}\n'.format(game))
             ret = input('agree to this game? [Y/n]: ')
 
             if ret == '' or ret.upper() == 'Y':
