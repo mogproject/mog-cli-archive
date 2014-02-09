@@ -7,14 +7,14 @@ from core import *
 
 
 class State:
-    def __init__(self):
-        self.to_move = BLACK
+    def __init__(self, to_move=BLACK, board=defaultdict(lambda: ' * '), hand=defaultdict(int)):
+        self.to_move = to_move
 
         # board: {Pos, Piece} e.g. {'77': '+FU', '51': '-OU'}
-        self.board = defaultdict(lambda: ' * ')
+        self.board = board
 
         # hand: {Piece, count} e.g. {'+FU': 3, '-HI': 0}
-        self.hand = defaultdict(int)
+        self.hand = hand
 
     def __str__(self):
         buf = []
@@ -34,6 +34,9 @@ class State:
 
     def __repr__(self):
         return 'State({})'.format(self.__str__())
+
+    def copy(self):
+        return State(self.to_move, self.board.copy(), self.hand.copy())
 
     def set(self, pos, piece):
         if pos == POS_HAND:

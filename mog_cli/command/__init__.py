@@ -7,3 +7,5 @@ from command.move_command import MoveCommand
 from command.resign_command import ResignCommand
 from command.win_command import WinCommand
 from command.info_command import InfoCommand
+
+# TODO: communicate with mogami engine

@@ -11,7 +11,8 @@ from core.record import Record
 class Game:
 
     def __init__(self, game_condition):
-        self.__load_text(game_condition['Game_Summary']['Position'])  # set state and history
+        self.init_state, self.history = self.__load_text(game_condition['Game_Summary']['Position'])
+        self.state = self.init_state.copy()
         self.id = game_condition['Game_Summary']['Game_ID']
         self.my_turn = game_condition['Game_Summary']['Your_Turn']
         self.condition = game_condition
@@ -29,8 +30,8 @@ class Game:
         buf.append('  Total Time         : {}'.format(s['Time']['Total_Time']))
         buf.append('  Byoyomi            : {}'.format(s['Time']['Byoyomi']))
         buf.append('  Least Time Per Move: {}'.format(s['Time']['Least_Time_Per_Move']))
-        buf.append('[Position]')
-        buf.extend(('  {}'.format(s) for s in str(self.state).splitlines()))
+        buf.append('[Position On Start]')
+        buf.extend(('  {}'.format(s) for s in str(self.init_state).splitlines()))
         buf.append('[History]')
         buf.extend(('  {}'.format(s) for s in self.history_str().splitlines()))
         return '\n'.join(buf)
@@ -52,7 +53,7 @@ class Game:
 
     def __load_text(self, text):
         game_records = Record.read(text.splitlines())
-        _, self.state, self.history = game_records[0]
+        return game_records[0][1:]
 
     def move(self, mv):
         if not mv.is_special:
