@@ -46,9 +46,8 @@ class Game:
         width = 4
         if not self.history:
             return 'no history'
-        buf = ['{:03d}: {}    {}'.format(
-            i, h, '\n' if (i + 1) % width == 0 else '') for i, h in enumerate(self.history)]
-        # TODO: align chars
+        buf = ['{:03d}: {}'.format(i, h) for i, h in enumerate(self.history)]
+        buf = ['{:20s}{}'.format(h, '\n' * (i % width - width + 2)) for i, h in enumerate(buf)]
         return ''.join(buf)
 
     def __load_text(self, text):
