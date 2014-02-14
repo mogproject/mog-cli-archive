@@ -44,6 +44,9 @@ class Record:
         """
         @param iterable list or iterator of string
         @return list of tuple, (game_information, initial_state, history)
+                game_information: dict object
+                initial_state   : State object
+                history         : list of Move object
         """
 
         ### preprocessor
@@ -69,7 +72,10 @@ class Record:
             # TODO: read game info
             if _RE_PRESET.match(line):
                 xs = chunk(line[2:], 4)
-                pass  # TODO: implement preset to Hirate
+                state.set_hirate()
+                for p in xs:
+                    state.reset_board(p[:2])
+
             elif _RE_BOARD.match(line):
                 rank = line[1]
                 xs = chunk(line[2:], 3)
@@ -77,12 +83,16 @@ class Record:
                     # print(p + ' ' + str(p[0] in TURNS) + ' ' + p[0])
                     if p[0] in TURNS:
                         state.set('{}{}'.format(9 - i, rank), p)
+
             elif _RE_PIECE.match(line):
                 turn = line[1]
                 xs = chunk(line[2:], 4)
                 for p in xs:
-                    # TODO: apply to '00AL'
-                    state.set(p[0:2], turn + p[2:4])
+                    if p == '00AL':
+                        # TODO: calc the rest of pieces except king
+                        # TODO: set 00al already set
+                        state.set(p[0:2], turn + p[2:4])
+
             elif _RE_TO_MOVE.match(line):
                 state.to_move = line
             # TODO: parse move history
