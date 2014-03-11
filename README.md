@@ -1,4 +1,4 @@
-mog-cli
+mog-cli [![Stories in Ready](https://badge.waffle.io/mogproject/mog-cli.png)](http://waffle.io/mogproject/mog-cli)
 =======
 
 Command Line Interface for CSA Shogi Client
